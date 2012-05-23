@@ -1,0 +1,85 @@
+#!/usr/local/bin/python
+
+import jinja2
+import os
+import shine
+import sys
+
+def ctype(type):
+  """Map Python types to C types."""
+  types = {
+    'INT8': 'int8',
+    'INT16': 'int16',
+    'BOOL': 'bool'
+  }
+  return types[type]
+
+def bitpacked(fields):
+  """ Returns the repeatedness of fields, bitpacked, in blocks of 8 bits """
+  repeated = [len(fields) // 8]
+  for i in range(0, len(fields)):
+    if fields[i].repeated_:
+      block = (i // 8)
+      repeated[block] |= (1 << (i - (8 * block)))
+  return ','.join([hex(x) for x in repeated])
+
+if __name__ == '__main__':
+  # Search for user prefs. If stored, the library directory can be omitted.
+  home = os.path.expanduser("~")
+  prefs = os.path.join(home, '.shine')
+  if os.path.exists(os.path.join(home, '.shine')) and len(sys.argv) == 2:
+    f = open(prefs, 'r')
+    library_dir = f.read()
+    print 'Loaded Arduino library directory from .shine'
+  else:
+      library_dir = None
+
+  if not (len(sys.argv) == 3 or (library_dir and len(sys.argv) == 2)):
+    print "Usage: shine-compiler protocol.shn output/dir"
+    sys.exit()
+
+  if not library_dir:
+    library_dir = sys.argv[2]
+
+  if not os.path.exists(library_dir):
+    print "Supplied library path: '", library_dir, "' not found." 
+    sys.exit()
+
+  # Get from command line
+  path = sys.argv[1]
+
+  filename = os.path.basename(path)
+  f = open(path, 'r')
+  ast = shine.ShineParser(f.read())
+
+  env = jinja2.Environment(loader = jinja2.PackageLoader('shine', 'tmpl/'))
+
+  # C/C++ Specific filters.
+  env.filters['ctype'] = ctype
+  env.filters['bitpacked'] = bitpacked
+ 
+  messages = []
+  rpcs = [] 
+  for entry in ast:
+    if entry.__class__ == shine.Message:
+      messages.append(entry)
+    else:
+      rpcs.append(entry)
+
+  template = env.get_template('shine_arduino.tmpl')
+  output = template.render(
+      messages = messages,
+      rpcs = rpcs,
+      filename = filename)  
+  f = open(os.path.join(library_dir, filename + '.h'), 'w')
+  f.write(output)
+
+  template = env.get_template('shine_arduino_cpp.tmpl')
+  output = template.render(
+      messages = messages,
+      rpcs = rpcs,
+      filename = filename)
+  f = open(os.path.join(library_dir, filename + '.cpp'), 'w')
+  f.write(output)
+
+  print "Compiled succesfully!"

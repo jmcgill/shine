@@ -1,0 +1,52 @@
+// Copyright James McGill, 2011
+// Author: James McGill (jmcgill@plexer.net)
+
+#include "{{ filename }}.h"
+
+#include "shine_types.h"
+
+// Static message variables.
+{% for message in messages %}
+FieldTypes {{ message.name_ }}::types[{{ message.num_fields_ }}] = {
+  {% for field in message.fields_ %}
+    {{ field.type_ }},
+  {% endfor %}
+};
+
+char {{ message.name_ }}::repeated_[{{ (message.num_fields_ // 8) + 1 }}] = {
+  {{ message.fields_|bitpacked }}
+};
+{% endfor %}
+
+void HandleRPCCall_Generated(ShineImpl* service, int8 rpc_index) {
+  switch (rpc_index) {
+    {% for rpc in rpcs %}
+    case {{ rpc.index_ }}: {
+        {{ rpc.input_ }} input(service);
+        service->input_ = &input;
+        service->ReadBundledFields();
+
+        {% if rpc.output_ %}
+        {{ rpc.output_ }} output(service);
+        {{ rpc.name_ }}(
+            *(({{ rpc.input_ }} *)service->input_),
+            &output);
+        {% else %}
+        {{ rpc.name_ }}(*(({{ rpc.input_ }} *)service->input_));
+        {% endif %}
+
+        service->SendCommand('x');
+
+        {% if rpc.output_ %}
+        service->SendScalarFields(&output);
+        {% else %}
+        service->SendNoScalarFields();
+        {% endif %}
+        break;
+    }
+    {% endfor %}
+    default:
+      // Do nothing.
+      break;
+  }
+}

@@ -1,0 +1,173 @@
+// Copyright James McGill, 2011
+// Author: James McGill (jmcgill@plexer.net)
+
+#ifndef SHINE_{{ filename|replace('.', '_') }}_H_
+#define SHINE_{{ filename|replace(',', '_') }}_H_
+
+#include "message.h"
+#include "shine_types.h"
+#include "bitpack.h"
+#include "shine.h"
+
+{% for message in messages %}
+class {{ message.name_ }} : public Message {
+public:
+  // Types for each field.
+  static FieldTypes types[{{ message.num_fields_ }}];
+
+  // Bitpacked representation of which fields are repeated.
+  static char repeated_[{{ (message.num_fields_ // 8) + 1 }}];
+
+  // Bitpacked representation of which fields have been downloaded.
+  char has_fields_[{{ (message.num_fields_ // 8) + 1 }}];
+
+  // A pointer to the Shine service which initialized this message.
+  ShineImpl* service_;
+
+  // Fields
+  {% for field in message.fields_ %}
+  {% if not field.repeated_ %}
+    {{ field.type_|ctype }} {{ field.name_ }}_;
+  {% else %}
+    int32 {{ field.name_}}_length_;
+  {% endif %}
+  {% endfor %}
+ 
+  {{ message.name_ }}(ShineImpl* service) {
+    // has_fields_[0] = 0;
+    service_ = service;
+
+    // Initialize length fields.
+    {% for field in message.fields_ %}
+    {% if field.repeated_ %}
+    {{ field.name_}}_length_ = 0;
+    {% endif %}
+    {% endfor %}
+  }
+ 
+  inline int8 num_fields() {
+    return {{ message.num_fields_ }};
+  }
+
+  inline int8 num_scalar_fields() {
+    return {{ message.num_scalar_fields_ }};
+  }
+  
+  inline bool repeated(int8 index) {
+    return ReadBitpackedBit({{ message.name_ }}::repeated_, index);
+  }
+
+  inline FieldTypes type(int8 index) {
+    return {{ message.name_ }}::types[index];
+  }
+
+  {% for field in message.fields_ %}
+  {% if not field.repeated_ %}
+  void set_{{ field.name_ }}({{ field.type_|ctype }} value) {
+    SetBitpackedBit(has_fields_, {{ field.index_ }});
+    {{ field.name_ }}_ = value;
+  }
+
+  {{ field.type_|ctype }} get_{{ field.name_ }}() {
+    if (!ReadBitpackedBit(has_fields_, {{ field.index_ }})) {
+      service_->RequestField({{ field.index_ }}); 
+    }
+    return {{ field.name_ }}_;
+  }
+  {% else %}
+  {{ field.type_|ctype }} get_{{ field.name_ }}(int32 offset) {
+    // Array fields are always accessed remotely.
+    return *(({{ field.type_|ctype }} *)service_->RequestRepeatedField({{ field.index_ }}, offset));
+  }
+
+  void set_{{ field.name_ }}(int32 offset, {{ field.type_|ctype }} value) {
+    // Array fields are always accessed remotely.
+    service_->SendRepeatedField(
+        {{ field.type_ }},
+        {{ field.index_ }},
+        offset,
+        (void *)&value);
+
+    if (offset >= {{ field.name_ }}_length) {
+      {{ field.name_ }}_length = offset + 1;
+    }
+  }
+
+  void add_{{ field.name_ }}({{ field.type_|ctype }} value) {
+    service_->SendRepeatedField(
+        {{ field.type_ }},
+        {{ field.index_ }},
+        {{ field.name_ }}_length_,
+        (void *)&value);
+    {{ field.name_ }}_length_ += 1;
+  }
+
+  int32 {{ field.name_ }}_size() {
+    return {{ field.name_ }}_length; 
+  }
+
+  {% endif %}
+  {% endfor %}
+
+  void set_value(int8 index, void* value) {
+    switch (index) {
+      {% for field in message.fields_ %}
+      {% if not field.repeated_ %}
+      case {{ field.index_ }}:
+        set_{{ field.name_ }}(*(({{ field.type_|ctype }}*)value));
+        break;
+      {% endif %}
+      {% endfor %}
+      default:
+        // Do nothing.
+        break;
+    }
+  }
+
+  void set_size(int8 index, int32 size) {
+    switch (index) {
+      {% for field in message.fields_ %}
+      {% if field.repeated_ %}
+      case {{ field.index_ }}:
+        {{ field.name_ }}_length_ = size;
+        break;
+      {% endif %}
+      {% endfor %}
+      default:
+        // Do nothing.
+        break;
+    }
+  }
+
+  // TODO(jmcgill): How to pass types around correcty? I might actually want
+  // an Int8 and an Int16 class etc that can all handle how to store and
+  // send themselves.
+  void * get_value(int8 index) {
+    switch (index) {
+      {% for field in message.fields_ %}
+      {% if not field.repeated_ %}
+      case {{ field.index_ }}:
+        return (void *)&{{ field.name_ }}_;
+        break;
+      {% endif %}
+      {% endfor %}
+      default:
+        // Do nothing.
+        break;
+    }
+  }
+};
+{% endfor %}
+
+void HandleRPCCall_Generated(ShineImpl* service);  
+
+// Declare RPCs.
+{% for rpc in rpcs %}
+{% if rpc.output_ %}
+void {{ rpc.name_ }}({{ rpc.input_ }}& input, {{ rpc.output_ }}* output);
+{% else %}
+void {{ rpc.name_ }}({{ rpc.input_ }}& input);
+{% endif %}
+{% endfor %}
+
+#endif

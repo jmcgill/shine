@@ -1,0 +1,53 @@
+#!/usr/local/bin/python
+
+import os
+import pkg_resources
+import sys
+
+def main():
+  args = sys.argv
+  if not len(args) == 2:
+    print 'Usage: shine-configure path/to/Arduino/libraries'
+    sys.exit()
+
+  if not os.path.exists(sys.argv[1]):
+    print 'Supplied path: ', sys.argv[1], ' does not exist'
+    sys.exit()
+
+  full_path = os.path.join(sys.argv[1], 'Shine')
+
+  try:
+    os.mkdir(full_path)
+  except:
+    # Folder already exists - may be an old installation.
+    pass
+  
+  # Store the path to the libraries directory, for use by the compiler.
+  home = os.path.expanduser("~")
+  f = open(os.path.join(home, '.shine'), 'w')
+  f.write(full_path)
+  f.close()
+
+  # Copy all requires files to the library.
+  required_files = [
+      'bitpack.h',
+      'bitpack.cpp',
+      'message.h', 
+      'serial_transport.h',
+      'shine.h',
+      'shine.cpp',
+      'shine_types.h',
+      'transport.h']
+
+  manager = pkg_resources.ResourceManager()
+  provider = pkg_resources.get_provider("shine")
+  for file in required_files:
+    data = provider.get_resource_string(manager, "library/" + file)
+    f = open(os.path.join(full_path, file), 'w')
+    f.write(data)
+    f.close()
+
+  print 'Configuration complete. You should now restart the Arduino IDE'
+  
+if __name__ == '__main__':
+  main() 
