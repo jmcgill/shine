@@ -59,6 +59,9 @@ class {{ message.name_ }}:
   {% for field in message.fields_ %} 
   {% if field.repeated_ %}
   def set_{{ field.name_ }}(self, index, value):
+    if len(self.fields[{{ field.index_ }}]) <= index:
+      self.fields[{{ field.index_ }}].append([0] * (index - len(self.fields[{{ field.index_ }}]) + 1))
+
     self.fields[{{ field.index_ }}][index] = value
 
   def get_{{ field.name_ }}(self, index):
