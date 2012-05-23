@@ -32,6 +32,8 @@ class SerialTransport():
     self.SendByte(value & 0xFF)
 
   def SendUInt32(self, value):
+    self.SendByte((value >> 24) & 0xFF)
+    self.SendByte((value >> 16) & 0xFF)
     self.SendByte((value >> 8) & 0xFF)
     self.SendByte(value & 0xFF)
 

@@ -88,8 +88,8 @@ public:
         offset,
         (void *)&value);
 
-    if (offset >= {{ field.name_ }}_length) {
-      {{ field.name_ }}_length = offset + 1;
+    if (offset >= {{ field.name_ }}_length_) {
+      {{ field.name_ }}_length_ = offset + 1;
     }
   }
 
@@ -103,7 +103,7 @@ public:
   }
 
   int32 {{ field.name_ }}_size() {
-    return {{ field.name_ }}_length; 
+    return {{ field.name_ }}_length_;
   }
 
   {% endif %}
